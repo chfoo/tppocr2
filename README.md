@@ -13,6 +13,8 @@ Requirements:
 
 * Python 3.7+
 * [Tesseract](https://github.com/tesseract-ocr/tesseract) 4
+* [tessdata_best](https://github.com/tesseract-ocr/tessdata_best)
+  * Which should contain: eng jpn chi_sim chi_tra kor spa deu ita
 * [ffmpeg](https://ffmpeg.org/download.html)
 * [Pillow](https://pillow.readthedocs.io/en/stable/index.html) 6.1+
 * [tesserocr](https://github.com/sirfz/tesserocr) 2.5+

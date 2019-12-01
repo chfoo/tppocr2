@@ -23,15 +23,17 @@ class OCR:
         if not tesserocr.PyTessBaseAPI.Version().startswith('4.'):
             raise Exception('Designed for Tesseract 4 only')
 
-        self._ocr_api = tesserocr.PyTessBaseAPI(lang='eng', psm=tesserocr.PSM.SINGLE_BLOCK)
-        self._ocr_api.SetVariable("classify_enable_learning", "0")
-        self._ocr_api.SetVariable("user_defined_dpi", "90")
+        self._ocr_api = None
+        self._reset_ocr()
 
     def _reset_ocr(self):
         if self._ocr_api:
             self._ocr_api.End()
 
-        self._ocr_api = tesserocr.PyTessBaseAPI(lang='eng', psm=tesserocr.PSM.SINGLE_BLOCK)
+        self._ocr_api = tesserocr.PyTessBaseAPI(
+            path='../tessdata_best/',
+            lang='eng+jpn+chi_sim+chi_tra+kor+spa+deu+ita',
+            psm=tesserocr.PSM.SINGLE_BLOCK)
         self._ocr_api.SetVariable("classify_enable_learning", "0")
         self._ocr_api.SetVariable("user_defined_dpi", "90")
 
@@ -115,7 +117,7 @@ class OCR:
     def _get_image_text(self, image: PIL.Image, region: Region) -> Tuple[str, float]:
         target_image = image.crop(region.box())
 
-        if region == 'cutscene_dialog':
+        if region.name == 'cutscene_dialog':
             # https://stackoverflow.com/a/39173605
             #  NV = Min(255, Max(0, (V - L) * 255 / (H - L)))
             target_image = PIL.ImageMath.eval('(convert(a, "L") - 127) * 255 / (255 - 127)', a=target_image).convert('RGB')

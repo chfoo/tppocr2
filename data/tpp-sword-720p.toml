@@ -8,8 +8,9 @@ region_order = [
     "unnamed_excited_npc_dialog",
     "interaction_dialog",
     "cutscene_dialog",
+    "trade_dialog",
+    "bag_dialog",
     # "hint_dialog",
-    # "bag_dialog",
 ]
 
 [timestamp-region]
@@ -122,6 +123,20 @@ points = [
     660, 450, 0xfdfdfd,
     185, 520, 0xfdfdfd,
     620, 520, 0xfdfdfd,
+]
+
+[[region]]
+name = "trade_dialog"
+x = 230
+y = 447
+width = 384
+height = 63
+scale = 2.0
+points = [
+    255, 450, 0x333333,
+    595, 450, 0x333333,
+    230, 505, 0x333333,
+    560, 505, 0x333333,
 ]
 
 [[region]]
