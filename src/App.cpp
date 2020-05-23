@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <limits>
+#include <cmath>
 
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -12,10 +13,10 @@ namespace tppocr {
 
 App::App(std::shared_ptr<Config> config) :
     config(config),
-    ocr(config),
     inputStream(config) {
 
     for (auto & region : config->regions) {
+        textRecognizers.try_emplace(region.name, config, region);
         textDetectors.emplace(region.name, config);
     }
 
@@ -35,6 +36,10 @@ App::App(std::shared_ptr<Config> config) :
 
     freetype = cv::freetype::createFreeType2();
     freetype->loadFontData("/usr/share/fonts/truetype/unifont/unifont.ttf", 0);
+
+    frameSkip = std::floor(inputStream.fps() / config->processingFPS);
+
+    std::cerr << "Skipping every " << frameSkip << " frame(s)." << std::endl;
 }
 
 void App::run() {
@@ -44,15 +49,30 @@ void App::run() {
 }
 
 void App::frameCallback() {
+    if (frameSkipCounter > 0) {
+        frameSkipCounter--;
+        return;
+    }
+
+    inputStream.convertFrameToBGR();
     image.copyTo(debugImage);
 
     processRegions();
 
-    const std::string windowName = "tppocr";
+    if (config->debugWindow) {
+        const std::string windowName = "tppocr";
 
-    cv::namedWindow(windowName, cv::WINDOW_AUTOSIZE);
-    cv::imshow(windowName, debugImage);
-    cv::waitKey(0);
+        cv::namedWindow(windowName, cv::WINDOW_AUTOSIZE);
+        cv::imshow(windowName, debugImage);
+    }
+
+    if (config->frameStepping) {
+        cv::waitKey(0);
+    } else {
+        cv::waitKey(1);
+    }
+
+    frameSkipCounter = frameSkip;
 }
 
 
@@ -77,6 +97,12 @@ void App::processRegion(const Region & region) {
         cv::Scalar(0, 0)
     );
 
+    if (region.alwaysHasText) {
+        processTextBlock(region,
+            cv::Rect(region.x, region.y, region.width, region.height));
+        return;
+    }
+
     cv::Mat subImage = cv::Mat(image,
         cv::Rect(region.x, region.y, region.width, region.height));
 
@@ -89,6 +115,10 @@ void App::processRegion(const Region & region) {
     auto & detections = textDetector.getDetections();
     auto & confidences = textDetector.getConfidences();
     auto & indices = textDetector.getIndices();
+
+    if (indices.empty()) {
+        return;
+    }
 
     int minX = std::numeric_limits<int>::max();
     int minY = std::numeric_limits<int>::max();
@@ -151,14 +181,15 @@ void App::drawDetection(const Region & region, const cv::RotatedRect & box,
 
 void App::processTextBlock(const Region & region, const cv::Rect & box) {
     cv::Mat regionImage = cv::Mat(image, box);
+    auto & ocr = textRecognizers.at(region.name);
     ocr.processImage(regionImage);
 
     auto text = ocr.getText();
 
     drawTextBlock(region, box);
-    drawOCRThresholdImage(box);
-    drawOCRLineBoundaries(box);
-    drawOCRText(box);
+    drawOCRThresholdImage(region, box);
+    drawOCRLineBoundaries(region, box);
+    drawOCRText(region, box);
 }
 
 void App::drawTextBlock(const Region & region, const cv::Rect & box) {
@@ -167,7 +198,8 @@ void App::drawTextBlock(const Region & region, const cv::Rect & box) {
         CV_RGB(255, 255, 0));
 }
 
-void App::drawOCRText(const cv::Rect & box) {
+void App::drawOCRText(const Region & region, const cv::Rect & box) {
+    auto & ocr = textRecognizers.at(region.name);
     auto confidence = ocr.getMeanConfidence();
     char confidenceString[10];
     snprintf(confidenceString, 10, "%0.2f", confidence);
@@ -191,10 +223,11 @@ void App::drawOCRText(const cv::Rect & box) {
     //     cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 255));
     freetype->putText(debugImage, text,
         cv::Point(box.x, box.y + offsetY),
-        16, CV_RGB(0, 255, 255), -1, cv::LINE_8, true);
+        16, CV_RGB(255, 127, 0), -1, cv::LINE_8, true);
 }
 
-void App::drawOCRThresholdImage(const cv::Rect & box) {
+void App::drawOCRThresholdImage(const Region & region, const cv::Rect & box) {
+    auto & ocr = textRecognizers.at(region.name);
     auto thresholdImage = ocr.getThresholdedImage();
     int offsetY = 0;
 
@@ -209,7 +242,8 @@ void App::drawOCRThresholdImage(const cv::Rect & box) {
     thresholdImage.copyTo(debugImage(drawingRect));
 }
 
-void App::drawOCRLineBoundaries(const cv::Rect & box) {
+void App::drawOCRLineBoundaries(const Region & region, const cv::Rect & box) {
+    auto & ocr = textRecognizers.at(region.name);
     auto lineBoundaries = ocr.getLineBoundaries();
     int offsetY = 0;
 

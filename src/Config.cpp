@@ -3,8 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <stdint.h>
-
-#include <toml++/toml.h>
+#include <stdexcept>
 
 namespace tppocr {
 
@@ -21,25 +20,38 @@ void Config::parseFromTOML(const std::string path) {
             << std::endl;
     }
 
-    realTime = table.get("realtime")->as_boolean()->get();
-    processingFPS = table.get("processing-fps")->as_floating_point()->get();
-    tessdataPath = table.get("tessdata")->as_string()->get();
-    detectorModelPath = table.get("detector-model")->as_string()->get();
-    detectorConfidenceThreshold = table.get("detector-confidence-threshold")->as_floating_point()->get();
-    detectorNonmaximumSuppressionThreshold = table.get("detector-nonmaximum-suppresion-threshold")->as_floating_point()->get();
+    realTime = getTOMLNode(table, "realtime").as_boolean()->get();
+    processingFPS = getTOMLNode(table, "processing-fps").as_floating_point()->get();
+    tessdataPath = getTOMLNode(table, "tessdata").as_string()->get();
+    detectorModelPath = getTOMLNode(table, "detector-model").as_string()->get();
+    detectorConfidenceThreshold = getTOMLNode(table, "detector-confidence-threshold").as_floating_point()->get();
+    detectorNonmaximumSuppressionThreshold = getTOMLNode(table, "detector-nonmaximum-suppression-threshold").as_floating_point()->get();
 
     for (const auto & node : *table["region"].as_array()) {
-        const auto regionConfig = node.as_table();
+        const auto & regionConfig = *node.as_table();
         Region region;
-        region.name = regionConfig->get("name")->as_string()->get();
-        region.x = regionConfig->get("x")->as_integer()->get();
-        region.y = regionConfig->get("y")->as_integer()->get();
-        region.width = regionConfig->get("width")->as_integer()->get();
-        region.height = regionConfig->get("height")->as_integer()->get();
+        region.name = regionConfig["name"].as_string()->get();
+        region.x = regionConfig["x"].as_integer()->get();
+        region.y = regionConfig["y"].as_integer()->get();
+        region.width = regionConfig["width"].as_integer()->get();
+        region.height = regionConfig["height"].as_integer()->get();
+
+        region.alwaysHasText = regionConfig["always-has-text"].value_or<bool>(false);
+        region.patternFilename = regionConfig["recognizer-pattern-file"].value_or<std::string>("");
 
         regions.push_back(region);
 
         std::cerr << "Configured region '" << region.name << "'" << std::endl;
+    }
+}
+
+toml::node_view<toml::node> Config::getTOMLNode(toml::table & table, const std::string key) {
+    auto view = table[key];
+
+    if (view) {
+        return view;
+    } else {
+        throw std::runtime_error("Missing key" + key);
     }
 }
 

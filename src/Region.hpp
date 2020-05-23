@@ -10,6 +10,8 @@ struct Region {
     int y = 0;
     int width = 0;
     int height = 0;
+    bool alwaysHasText = false;
+    std::string patternFilename;
 };
 
 }

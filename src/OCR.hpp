@@ -25,7 +25,7 @@ class OCR {
     float meanConfidence = 0;
 
 public:
-    explicit OCR(std::shared_ptr<Config> config);
+    explicit OCR(std::shared_ptr<Config> config, const Region & region);
 
     const std::string & getText();
     float getMeanConfidence();

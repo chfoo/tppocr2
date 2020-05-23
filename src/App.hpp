@@ -17,12 +17,14 @@ namespace tppocr {
 
 class App {
     std::shared_ptr<Config> config;
-    OCR ocr;
+    std::unordered_map<std::string,OCR> textRecognizers;
     std::unordered_map<std::string,TextDetector> textDetectors;
     InputStream inputStream;
     cv::Mat image;
     cv::Mat debugImage;
     std::shared_ptr<cv::freetype::FreeType2> freetype;
+    unsigned int frameSkip = 0;
+    unsigned int frameSkipCounter = 0;
 
 public:
     explicit App(std::shared_ptr<Config> config);
@@ -38,9 +40,9 @@ private:
         float confidence);
     void processTextBlock(const Region & region, const cv::Rect & box);
     void drawTextBlock(const Region & region, const cv::Rect & box);
-    void drawOCRText(const cv::Rect & box);
-    void drawOCRThresholdImage(const cv::Rect & box);
-    void drawOCRLineBoundaries(const cv::Rect & box);
+    void drawOCRText(const Region & region, const cv::Rect & box);
+    void drawOCRThresholdImage(const Region & region, const cv::Rect & box);
+    void drawOCRLineBoundaries(const Region & region, const cv::Rect & box);
 };
 
 }

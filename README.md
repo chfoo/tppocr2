@@ -45,4 +45,4 @@ Basic usage:
 
 Example:
 
-    ./build/tppocr data/tpp-sword-720p.toml sample_images/sword_720p_narrator_dialog.png
+    ./build/tppocr --debug-window --frame-stepping data/tpp-sword-720p.toml sample_images/sword_720p_narrator_dialog.png

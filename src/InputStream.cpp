@@ -96,6 +96,11 @@ void InputStream::findVideoStream() {
         avcodec_open2(videoCodecContext, videoCodec, nullptr),
         "avcodec_open2 failed"
     );
+
+    auto frameRate = av_guess_frame_rate(formatContext, formatContext->streams[videoStreamIndex], nullptr);
+    fps_ = static_cast<double>(frameRate.num) / frameRate.den;
+
+    std::cerr << "video fps: " << fps_ << std::endl;
 }
 
 void InputStream::createVideoBuffers() {
@@ -129,7 +134,7 @@ void InputStream::createVideoBuffers() {
         videoCodecContext->height,
         videoCodecContext->pix_fmt,
         frameBGR->width, frameBGR->height, AV_PIX_FMT_BGR24,
-        SWS_BILINEAR, nullptr, nullptr, nullptr
+        SWS_FAST_BILINEAR, nullptr, nullptr, nullptr
     );
 }
 
@@ -147,6 +152,10 @@ unsigned int InputStream::videoFrameHeight() {
 
 uint8_t * InputStream::videoFrameData() {
     return frameBGRBuffer;
+}
+
+double InputStream::fps() {
+    return fps_;
 }
 
 void InputStream::runOnce() {
@@ -175,11 +184,13 @@ void InputStream::runOnce() {
             throw std::runtime_error("avcodec_receive_frame failed");
         }
 
-        sws_scale(scalerContext, frame->data, frame->linesize, 0, frame->height,
-            frameBGR->data, frame->linesize);
-
         callback();
     }
+}
+
+void InputStream::convertFrameToBGR() {
+    sws_scale(scalerContext, frame->data, frame->linesize, 0, frame->height,
+        frameBGR->data, frameBGR->linesize);
 }
 
 }

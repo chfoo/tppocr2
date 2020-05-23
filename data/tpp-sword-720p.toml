@@ -1,23 +1,38 @@
 # Configuration for TwitchPlaysPokemon Sword at 720p60 quality
 
-processing-fps = 60.0
+# Rate at which to samples frames from the input stream
+processing-fps = 2.0
+
+# Wether to process the input stream at the expected playback rate
+# (If false, process as fast as it can)
 realtime = false
+
+# Directory path to the tesseract trained data
 tessdata = "./../tessdata_fast"
+
+# Path to the EAST text detector Tensorflow trained model
 detector-model = "./data/frozen_east_text_detection.pb"
-detector-confidence-threshold = 0.5
-detector-nonmaximum-suppresion-threshold = 0.4
+# Text detector minimum confidence threshold
+detector-confidence-threshold = 0.5 # [0.0, 1.0]
+# Non-maximum suppression minimum threshold to apply to text detector results
+detector-nonmaximum-suppression-threshold = 0.4 # [0.0, 1.0]
+
+# Text recognition (OCR) minimum confidence threshold
+recognizer-confidence-threshold = 0.85
 
 [[region]]
 name = "timestamp"
 x = 925
 y = 690
-width = 250
+width = 245
 height = 30
+always-has-text = true  # Whether this region always contains text
+recognizer-pattern-file = "data/timestamp_pattern.txt"  # If specified, a path to Tesseract User Pattern file
 
 [[region]]
 name = "dialog"
-x = 10
+x = 30
 y = 400
-width = 840
+width = 820
 height = 130
 

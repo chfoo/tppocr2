@@ -4,20 +4,34 @@
 #include <assert.h>
 
 #include <leptonica/allheaders.h>
+#include <tesseract/genericvector.h>
 
 namespace tppocr {
 
-OCR::OCR(std::shared_ptr<Config> config) {
-    tesseract.reset(new tesseract::TessBaseAPI());\
+OCR::OCR(std::shared_ptr<Config> config, const Region & region) {
+    tesseract.reset(new tesseract::TessBaseAPI());
 
-    auto errorCode = tesseract->Init(config->tessdataPath.c_str(),
-        "eng+jpn+chi_sim+chi_tra+kor+spa+deu+ita");
+    GenericVector<STRING> initKeys;
+    GenericVector<STRING> initValues;
+
+    if (!region.patternFilename.empty()) {
+        initKeys.push_back("user_patterns_file");
+        initValues.push_back(region.patternFilename.c_str());
+    }
+
+    auto errorCode = tesseract->Init(
+        config->tessdataPath.c_str(),
+        "eng+jpn+chi_sim+chi_tra+kor+spa+deu+ita",
+        tesseract::OEM_LSTM_ONLY,
+        nullptr, 0,
+        &initKeys, &initValues, false
+    );
 
     if (errorCode) {
         throw std::runtime_error("Tesseract error " + std::to_string(errorCode));
     }
 
-    tesseract->SetVariable("classify_enable_learning", "0");
+    // tesseract->SetVariable("classify_enable_learning", "0");
     tesseract->SetVariable("user_defined_dpi", "90");
 }
 

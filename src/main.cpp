@@ -17,10 +17,8 @@ int main(int argc, char const *argv[]) {
         "{help h | | Help message}"
         "{@config | | Path to toml configuration file}"
         "{@url | | URL or path to image/video file}"
-        "{real-time | | Process stream as live stream}"
-        "{processing-fps | 60 | FPS at which frames are sampled and processed}"
-        "{tessdata | ./tessdata_fast/ | Path to directory of trained Tesseract data}"
-        "{detector-model | ./frozen_east_text_detection.pb | Path to EAST .pb file (TensorFlow trained model)}"
+        "{debug-window | | Show a GUI window with debugging image}"
+        "{frame-stepping | | Whether the GUI window waits for a keypress before continuing}"
     ;
 
     cv::CommandLineParser argParser(argc, argv, keys);
@@ -40,7 +38,13 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
 
+    config->debugWindow = argParser.get<bool>("debug-window");
+    config->frameStepping = argParser.get<bool>("frame-stepping");
     config->parseFromTOML(configPath);
+
+    if (config->debugWindow) {
+        std::cerr << "debug window enabled" << std::endl;
+    }
 
     App app(config);
 

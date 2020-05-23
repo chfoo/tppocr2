@@ -31,6 +31,7 @@ class InputStream {
     AVFrame * frameBGR = nullptr;
     uint8_t * frameBGRBuffer = nullptr;
     SwsContext * scalerContext = nullptr;
+    double fps_ = 0;
 
     bool running = false;
 
@@ -44,8 +45,10 @@ public:
     unsigned int videoFrameWidth();
     unsigned int videoFrameHeight();
     uint8_t * videoFrameData();
+    double fps();
 
     void runOnce();
+    void convertFrameToBGR();
 
 private:
     void checkError(int errorCode, const std::string errorMessage);
