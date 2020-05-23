@@ -26,6 +26,7 @@ void Config::parseFromTOML(const std::string path) {
     detectorModelPath = getTOMLNode(table, "detector-model").as_string()->get();
     detectorConfidenceThreshold = getTOMLNode(table, "detector-confidence-threshold").as_floating_point()->get();
     detectorNonmaximumSuppressionThreshold = getTOMLNode(table, "detector-nonmaximum-suppression-threshold").as_floating_point()->get();
+    recognizerConfidenceThreshold = getTOMLNode(table, "recognizer-confidence-threshold").as_floating_point()->get();
 
     for (const auto & node : *table["region"].as_array()) {
         const auto & regionConfig = *node.as_table();

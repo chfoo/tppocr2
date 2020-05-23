@@ -1,9 +1,28 @@
 #include "TextDetector.hpp"
 
+#include <iostream>
+
 namespace tppocr {
 
 TextDetector::TextDetector(std::shared_ptr<Config> config) {
     network = cv::dnn::readNet(config->detectorModelPath);
+
+    if (config->preferInference) {
+        std::cerr << "Set network backend preference to Intel Inference Engine" << std::endl;
+        network.setPreferableBackend(cv::dnn::DNN_BACKEND_INFERENCE_ENGINE);
+    }
+
+    if (config->preferCPU) {
+        std::cerr << "Set network target preference to CPU" << std::endl;
+        network.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+    } else if (config->preferOpenCL) {
+        std::cerr << "Set network target preference to OpenCL" << std::endl;
+        network.setPreferableTarget(cv::dnn::DNN_TARGET_OPENCL);
+    } else if (config->preferCUDA) {
+        std::cerr << "Set network backend and target preference to CUDA" << std::endl;
+        network.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
+        network.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    }
 
     outputBlobNames.push_back("feature_fusion/Conv_7/Sigmoid");
     outputBlobNames.push_back("feature_fusion/concat_3");

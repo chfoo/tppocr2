@@ -13,7 +13,7 @@ tessdata = "./../tessdata_fast"
 # Path to the EAST text detector Tensorflow trained model
 detector-model = "./data/frozen_east_text_detection.pb"
 # Text detector minimum confidence threshold
-detector-confidence-threshold = 0.5 # [0.0, 1.0]
+detector-confidence-threshold = 0.8 # [0.0, 1.0]
 # Non-maximum suppression minimum threshold to apply to text detector results
 detector-nonmaximum-suppression-threshold = 0.4 # [0.0, 1.0]
 

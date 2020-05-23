@@ -13,6 +13,11 @@ class Config {
 public:
     bool debugWindow = false;
     bool frameStepping = false;
+    bool preferCPU = false;
+    bool preferOpenCL = false;
+    bool preferCUDA = false;
+    bool preferInference = false;
+    bool profiling = false;
 
     std::string url;
     std::string tessdataPath;
@@ -22,6 +27,7 @@ public:
     std::vector<Region> regions;
     float detectorConfidenceThreshold = 0.5;
     float detectorNonmaximumSuppressionThreshold = 0.4;
+    float recognizerConfidenceThreshold = 0.7;
 
     void parseFromTOML(const std::string path);
 

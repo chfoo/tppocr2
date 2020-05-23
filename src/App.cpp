@@ -78,13 +78,18 @@ void App::frameCallback() {
 
 void App::processRegions() {
     for (const auto & region : config->regions) {
-        // cv::TickMeter tickMeter;
-        // tickMeter.start();
         processRegion(region);
-        // tickMeter.stop();
-        // std::cerr << "Procesing region " << region.name
-        //     << " tick time: " << tickMeter.getTimeSec() << std::endl;
     }
+
+    // cv::parallel_for_(
+    //     cv::Range(0, config->regions.size()),
+    //     [&](const cv::Range & range) {
+    //         for (int index = range.start; index < range.end; index++) {
+    //             const auto & region = config->regions.at(index);
+    //             processRegion(region);
+    //         }
+    //     }
+    // );
 }
 
 void App::processRegion(const Region & region) {
@@ -110,7 +115,17 @@ void App::processRegion(const Region & region) {
 
     auto & textDetector = textDetectors.at(region.name);
 
+    cv::TickMeter tickMeter;
+    if (config->profiling) {
+        tickMeter.start();
+    }
     textDetector.processImage(regionImage);
+
+    if (config->profiling) {
+        tickMeter.stop();
+        std::cerr << "Detecting region " << region.name
+            << " tick time: " << tickMeter.getTimeSec() << std::endl;
+    }
 
     auto & detections = textDetector.getDetections();
     auto & confidences = textDetector.getConfidences();
@@ -182,9 +197,28 @@ void App::drawDetection(const Region & region, const cv::RotatedRect & box,
 void App::processTextBlock(const Region & region, const cv::Rect & box) {
     cv::Mat regionImage = cv::Mat(image, box);
     auto & ocr = textRecognizers.at(region.name);
+
+    cv::TickMeter tickMeter;
+    if (config->profiling) {
+        tickMeter.start();
+    }
     ocr.processImage(regionImage);
 
+    if (config->profiling) {
+        tickMeter.stop();
+        std::cerr << "Recognizing box " << region.name
+            << " tick time: " << tickMeter.getTimeSec() << std::endl;
+    }
+
     auto text = ocr.getText();
+
+    auto confidence = ocr.getMeanConfidence();
+
+    if (confidence >= config->recognizerConfidenceThreshold) {
+        // TODO: emit text
+        // (in thread safe manner if threading)
+        // emitText();
+    }
 
     drawTextBlock(region, box);
     drawOCRThresholdImage(region, box);
