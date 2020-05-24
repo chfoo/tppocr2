@@ -20,7 +20,6 @@ void Config::parseFromTOML(const std::string path) {
             << std::endl;
     }
 
-    realTime = getTOMLNode(table, "realtime").as_boolean()->get();
     processingFPS = getTOMLNode(table, "processing-fps").as_floating_point()->get();
     tessdataPath = getTOMLNode(table, "tessdata").as_string()->get();
     detectorModelPath = getTOMLNode(table, "detector-model").as_string()->get();

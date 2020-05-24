@@ -3,10 +3,6 @@
 # Rate at which to samples frames from the input stream
 processing-fps = 2.0
 
-# Wether to process the input stream at the expected playback rate
-# (If false, process as fast as it can)
-realtime = false
-
 # Directory path to the tesseract trained data
 tessdata = "./../tessdata_fast"
 
