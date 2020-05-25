@@ -138,6 +138,10 @@ void InputStream::createVideoBuffers() {
     );
 }
 
+unsigned int InputStream::frameCounter() {
+    return frameCounter_;
+}
+
 bool InputStream::isRunning() {
     return running;
 }
@@ -185,6 +189,7 @@ void InputStream::runOnce() {
         }
 
         callback();
+        frameCounter_++;
     }
 }
 

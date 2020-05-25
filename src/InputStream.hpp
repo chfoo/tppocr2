@@ -32,6 +32,7 @@ class InputStream {
     uint8_t * frameBGRBuffer = nullptr;
     SwsContext * scalerContext = nullptr;
     double fps_ = 0;
+    unsigned int frameCounter_ = 0;
 
     bool running = false;
 
@@ -41,6 +42,7 @@ public:
     explicit InputStream(std::shared_ptr<Config> config);
     ~InputStream();
 
+    unsigned int frameCounter();
     bool isRunning();
     unsigned int videoFrameWidth();
     unsigned int videoFrameHeight();

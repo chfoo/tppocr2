@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(tppocr2)
 
+set(USE_INFERENCE_ENGINE false CACHE BOOL "Use Intel OpenVINO Inference Engine")
+
 file(GLOB SRC_FILES src/*.cpp)
 
 add_executable(tppocr_exe ${SRC_FILES})
@@ -8,19 +10,23 @@ add_executable(tppocr_exe ${SRC_FILES})
 find_path(TESSERACT_INCLUDE_PATH "tesseract/baseapi.h")
 find_path(LEPTONICA_INCLUDE_PATH "leptonica/allheaders.h")
 find_path(TOMLPLUSPLUS_INCLUDE_PATH "toml++/toml.h")
+find_path(POCO_INCLUDE_PATH "Poco/Poco.h")
 
 find_library(TESSERACT_LIBRARY_PATH "tesseract")
 find_library(LEPTONICA_LIBRARY_PATH "leptonica")
+find_library(POCO_LIBRARY_PATH  "PocoFoundation")
 
 target_include_directories(tppocr_exe PRIVATE
     "${TESSERACT_INCLUDE_PATH}"
     "${LEPTONICA_INCLUDE_PATH}"
     "${TOMLPLUSPLUS_INCLUDE_PATH}"
+    "${POCO_INCLUDE_PATH}"
 )
 
 target_link_libraries(tppocr_exe PRIVATE
     "${TESSERACT_LIBRARY_PATH}"
     "${LEPTONICA_LIBRARY_PATH}"
+    "${POCO_LIBRARY_PATH}"
 )
 
 
@@ -54,6 +60,12 @@ target_link_libraries(tppocr_exe PRIVATE
 find_package(OpenCV REQUIRED)
 target_include_directories(tppocr_exe PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(tppocr_exe PRIVATE ${OpenCV_LIBS} )
+
+if(USE_INFERENCE_ENGINE)
+    find_package(InferenceEngine)
+    target_include_directories(tppocr_exe PRIVATE ${InferenceEngine_INCLUDE_DIRS})
+    target_link_libraries(tppocr_exe PRIVATE ${InferenceEngine_LIBRARIES} dl)
+endif()
 
 set_property(TARGET tppocr_exe PROPERTY C_STANDARD 11)
 set_property(TARGET tppocr_exe PROPERTY CXX_STANDARD 17)

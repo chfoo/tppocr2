@@ -7,24 +7,43 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/freetype.hpp>
+#include <Poco/ObjectPool.h>
 
 #include "Config.hpp"
 #include "OCR.hpp"
 #include "InputStream.hpp"
 #include "TextDetector.hpp"
+#include "WorkUnit.hpp"
+#include "WorkUnitResource.hpp"
 
 namespace tppocr {
 
+class WorkUnitResourceFactory {
+    std::shared_ptr<Config> config;
+    const Region & region;
+
+public:
+    explicit WorkUnitResourceFactory(std::shared_ptr<Config> config, const Region & region) :
+        config(config), region(region) {}
+    WorkUnitResourceFactory(const WorkUnitResourceFactory & other) :
+        config(other.config), region(other.region)  {}
+
+    WorkUnitResource * createObject() { return new WorkUnitResource(config, region); }
+    void activateObject(WorkUnitResource * object) {}
+    bool validateObject(WorkUnitResource * object) { return true; }
+    void deactivateObject(WorkUnitResource * object) {}
+    void destroyObject(WorkUnitResource * object) { delete object; }
+};
+
 class App {
     std::shared_ptr<Config> config;
-    std::unordered_map<std::string,OCR> textRecognizers;
-    std::unordered_map<std::string,TextDetector> textDetectors;
+    std::unordered_map<std::string,Poco::ObjectPool<WorkUnitResource,WorkUnitResource*,WorkUnitResourceFactory>*> workUnitResources;
     InputStream inputStream;
-    cv::Mat image;
-    cv::Mat debugImage;
-    std::shared_ptr<cv::freetype::FreeType2> freetype;
+    cv::Mat frameImage;
+    std::vector<WorkUnit> workUnits;
     unsigned int frameSkip = 0;
     unsigned int frameSkipCounter = 0;
+    unsigned int processedFrameCounter = 0;
 
 public:
     explicit App(std::shared_ptr<Config> config);
@@ -33,16 +52,18 @@ public:
 
 private:
     void frameCallback();
-    void processRegions();
-    void processRegion(const Region & region);
-    void drawRegion(const Region & region);
-    void drawDetection(const Region & region, const cv::RotatedRect & box,
+    void updateDebugWindow();
+    void processWorkUnits();
+    void processRegion(const WorkUnit & workUnit);
+    void drawRegion(const WorkUnit & workUnit);
+    void drawDetection(const WorkUnit & workUnit, const cv::RotatedRect & box,
         float confidence);
-    void processTextBlock(const Region & region, const cv::Rect & box);
-    void drawTextBlock(const Region & region, const cv::Rect & box);
-    void drawOCRText(const Region & region, const cv::Rect & box);
-    void drawOCRThresholdImage(const Region & region, const cv::Rect & box);
-    void drawOCRLineBoundaries(const Region & region, const cv::Rect & box);
+    void processTextBlock(const WorkUnit & workUnit, const cv::Rect & box);
+    void drawTextBlock(const WorkUnit & workUnit, const cv::Rect & box);
+    void drawOCRText(const WorkUnit & workUnit, const cv::Rect & box);
+    void drawOCRThresholdImage(const WorkUnit & workUnit, const cv::Rect & box);
+    void drawOCRLineBoundaries(const WorkUnit & workUnit, const cv::Rect & box);
+    void drawFrameInfo(const WorkUnit & workUnit);
 };
 
 }

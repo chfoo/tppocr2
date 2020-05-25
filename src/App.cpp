@@ -16,26 +16,19 @@ App::App(std::shared_ptr<Config> config) :
     inputStream(config) {
 
     for (auto & region : config->regions) {
-        textRecognizers.try_emplace(region.name, config, region);
-        textDetectors.emplace(region.name, config);
+        WorkUnitResourceFactory workUnitResourcePoolFactory(config, region);
+        workUnitResources.emplace(region.name,
+            new Poco::ObjectPool<WorkUnitResource,WorkUnitResource*,WorkUnitResourceFactory>(workUnitResourcePoolFactory, 32, 32));
     }
 
     inputStream.callback = std::bind(&App::frameCallback, this);
 
-    image = cv::Mat(
+    frameImage = cv::Mat(
         inputStream.videoFrameHeight(),
         inputStream.videoFrameWidth(),
         CV_8UC3,
         inputStream.videoFrameData()
     );
-    debugImage = cv::Mat(
-        inputStream.videoFrameHeight(),
-        inputStream.videoFrameWidth(),
-        CV_8UC3
-    );
-
-    freetype = cv::freetype::createFreeType2();
-    freetype->loadFontData("/usr/share/fonts/truetype/unifont/unifont.ttf", 0);
 
     frameSkip = std::floor(inputStream.fps() / config->processingFPS);
 
@@ -54,72 +47,108 @@ void App::frameCallback() {
         return;
     }
 
+    auto image = cv::Mat(
+        inputStream.videoFrameHeight(),
+        inputStream.videoFrameWidth(),
+        CV_8UC3
+    );
+    auto debugImage = cv::Mat(
+        inputStream.videoFrameHeight(),
+        inputStream.videoFrameWidth(),
+        CV_8UC3
+    );
+
     inputStream.convertFrameToBGR();
-    image.copyTo(debugImage);
+    frameImage.copyTo(image);
+    frameImage.copyTo(debugImage);
 
-    processRegions();
-
-    if (config->debugWindow) {
-        const std::string windowName = "tppocr";
-
-        cv::namedWindow(windowName, cv::WINDOW_AUTOSIZE);
-        cv::imshow(windowName, debugImage);
+    for (size_t index = 0; index < config->regions.size(); index++) {
+        workUnits.emplace_back(processedFrameCounter, inputStream.frameCounter(),
+            config->regions.at(index), image, debugImage);
     }
 
-    if (config->frameStepping) {
-        cv::waitKey(0);
-    } else {
-        cv::waitKey(1);
+    processedFrameCounter += 1;
+
+    if (workUnits.size() >= 4) {
+        processWorkUnits();
     }
 
     frameSkipCounter = frameSkip;
 }
 
+void App::updateDebugWindow() {
+    if (config->debugWindow) {
+        const std::string windowName = "tppocr";
 
-void App::processRegions() {
-    for (const auto & region : config->regions) {
-        processRegion(region);
+        cv::namedWindow(windowName, cv::WINDOW_AUTOSIZE);
+        drawFrameInfo(workUnits.back());
+        cv::imshow(windowName, workUnits.back().debugImage);
+
+        if (config->frameStepping) {
+            cv::waitKey(0);
+        } else {
+            cv::waitKey(1);
+        }
     }
-
-    // cv::parallel_for_(
-    //     cv::Range(0, config->regions.size()),
-    //     [&](const cv::Range & range) {
-    //         for (int index = range.start; index < range.end; index++) {
-    //             const auto & region = config->regions.at(index);
-    //             processRegion(region);
-    //         }
-    //     }
-    // );
 }
 
-void App::processRegion(const Region & region) {
-    drawRegion(region);
+void App::processWorkUnits() {
+    // std::cerr << "processWorkUnits size=" << workUnits.size() << std::endl;
+
+    // for (auto & workUnit : workUnits) {
+    //     std::cerr << "   id=" << workUnit.id << " " << workUnit.frameID << std::endl;
+    // }
+
+    cv::parallel_for_(
+        cv::Range(0, workUnits.size()),
+        [&](const cv::Range & range) {
+            for (int index = range.start; index < range.end; index++) {
+                auto & workUnit = workUnits.at(index);
+                auto workUnitResource = workUnitResources.at(workUnit.region.name)->borrowObject();
+                workUnit.freetype = workUnitResource->freetype;
+                workUnit.ocr = &workUnitResource->ocr;
+                workUnit.textDetector = &workUnitResource->textDetector;
+                processRegion(workUnit);
+                workUnitResources.at(workUnit.region.name)->returnObject(workUnitResource);
+            }
+        }
+    );
+
+    updateDebugWindow();
+
+    workUnits.clear();
+}
+
+void App::processRegion(const WorkUnit & workUnit) {
+    drawRegion(workUnit);
+
+    auto & region = workUnit.region;
 
     cv::Mat regionImage(
         roundUp2(region.height, 32),
         roundUp2(region.width, 32),
-        image.type(),
+        workUnit.image.type(),
         cv::Scalar(0, 0)
     );
 
     if (region.alwaysHasText) {
-        processTextBlock(region,
+        processTextBlock(workUnit,
             cv::Rect(region.x, region.y, region.width, region.height));
         return;
     }
 
-    cv::Mat subImage = cv::Mat(image,
+    cv::Mat subImage = cv::Mat(workUnit.image,
         cv::Rect(region.x, region.y, region.width, region.height));
 
     subImage.copyTo(regionImage(cv::Rect(0, 0, region.width, region.height)));
 
-    auto & textDetector = textDetectors.at(region.name);
+    auto textDetector = workUnit.textDetector;
 
     cv::TickMeter tickMeter;
     if (config->profiling) {
         tickMeter.start();
     }
-    textDetector.processImage(regionImage);
+    textDetector->processImage(regionImage);
 
     if (config->profiling) {
         tickMeter.stop();
@@ -127,9 +156,9 @@ void App::processRegion(const Region & region) {
             << " tick time: " << tickMeter.getTimeSec() << std::endl;
     }
 
-    auto & detections = textDetector.getDetections();
-    auto & confidences = textDetector.getConfidences();
-    auto & indices = textDetector.getIndices();
+    auto & detections = textDetector->getDetections();
+    auto & confidences = textDetector->getConfidences();
+    auto & indices = textDetector->getIndices();
 
     if (indices.empty()) {
         return;
@@ -150,29 +179,32 @@ void App::processRegion(const Region & region) {
         maxX = std::max(maxX, region.x + boundingBox.x + boundingBox.width);
         maxY = std::max(maxY, region.y + boundingBox.y + boundingBox.height);
 
-        drawDetection(region, box, confidence);
+        drawDetection(workUnit, box, confidence);
     }
 
     minX = std::max(minX - 5, 0);
     minY = std::max(minY - 5, 0);
-    maxX = std::min(maxX + 5, image.cols);
-    maxY = std::min(maxY + 5, image.rows);
+    maxX = std::min(maxX + 5, workUnit.image.cols);
+    maxY = std::min(maxY + 5, workUnit.image.rows);
 
     cv::Rect boundingBox(minX, minY, maxX - minX, maxY - minY);
 
-    processTextBlock(region, boundingBox);
+    processTextBlock(workUnit, boundingBox);
 }
 
-void App::drawRegion(const Region & region) {
-    cv::rectangle(debugImage,
+void App::drawRegion(const WorkUnit & workUnit) {
+    auto & region = workUnit.region;
+
+    cv::rectangle(workUnit.debugImage,
         cv::Rect(region.x, region.y, region.width, region.height),
         CV_RGB(255, 0, 255));
-    cv::putText(debugImage, region.name, cv::Point(region.x, region.y),
+    cv::putText(workUnit.debugImage, region.name, cv::Point(region.x, region.y),
         cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255, 0, 255));
 }
 
-void App::drawDetection(const Region & region, const cv::RotatedRect & box,
+void App::drawDetection(const WorkUnit & workUnit, const cv::RotatedRect & box,
         float confidence) {
+    auto & region = workUnit.region;
     cv::Point2f points[4];
     box.points(points);
 
@@ -182,27 +214,28 @@ void App::drawDetection(const Region & region, const cv::RotatedRect & box,
     }
 
     for (size_t index = 0; index < 4; index++) {
-        cv::line(debugImage, points[index], points[(index + 1) % 4],
+        cv::line(workUnit.debugImage, points[index], points[(index + 1) % 4],
             CV_RGB(0, 255, 0));
     }
 
     char confidenceString[10];
     snprintf(confidenceString, 10, "%0.2f", confidence);
 
-    cv::putText(debugImage, confidenceString,
+    cv::putText(workUnit.debugImage, confidenceString,
         points[1],
         cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 0));
 }
 
-void App::processTextBlock(const Region & region, const cv::Rect & box) {
-    cv::Mat regionImage = cv::Mat(image, box);
-    auto & ocr = textRecognizers.at(region.name);
+void App::processTextBlock(const WorkUnit & workUnit, const cv::Rect & box) {
+    auto & region = workUnit.region;
+    cv::Mat regionImage = cv::Mat(workUnit.image, box);
+    auto ocr = workUnit.ocr;
 
     cv::TickMeter tickMeter;
     if (config->profiling) {
         tickMeter.start();
     }
-    ocr.processImage(regionImage);
+    ocr->processImage(regionImage);
 
     if (config->profiling) {
         tickMeter.stop();
@@ -210,9 +243,9 @@ void App::processTextBlock(const Region & region, const cv::Rect & box) {
             << " tick time: " << tickMeter.getTimeSec() << std::endl;
     }
 
-    auto text = ocr.getText();
+    auto text = ocr->getText();
 
-    auto confidence = ocr.getMeanConfidence();
+    auto confidence = ocr->getMeanConfidence();
 
     if (confidence >= config->recognizerConfidenceThreshold) {
         // TODO: emit text
@@ -220,52 +253,54 @@ void App::processTextBlock(const Region & region, const cv::Rect & box) {
         // emitText();
     }
 
-    drawTextBlock(region, box);
-    drawOCRThresholdImage(region, box);
-    drawOCRLineBoundaries(region, box);
-    drawOCRText(region, box);
+    drawTextBlock(workUnit, box);
+    drawOCRThresholdImage(workUnit, box);
+    drawOCRLineBoundaries(workUnit, box);
+    drawOCRText(workUnit, box);
 }
 
-void App::drawTextBlock(const Region & region, const cv::Rect & box) {
-    cv::rectangle(debugImage,
+void App::drawTextBlock(const WorkUnit & workUnit, const cv::Rect & box) {
+    cv::rectangle(workUnit.debugImage,
         cv::Rect(box.x, box.y, box.width, box.height),
         CV_RGB(255, 255, 0));
 }
 
-void App::drawOCRText(const Region & region, const cv::Rect & box) {
-    auto & ocr = textRecognizers.at(region.name);
-    auto confidence = ocr.getMeanConfidence();
+void App::drawOCRText(const WorkUnit & workUnit, const cv::Rect & box) {
+    auto & region = workUnit.region;
+    auto ocr = workUnit.ocr;
+    auto confidence = ocr->getMeanConfidence();
     char confidenceString[10];
     snprintf(confidenceString, 10, "%0.2f", confidence);
 
     int offsetY = 0;
 
-    if (box.y + box.height < image.rows) {
+    if (box.y + box.height < workUnit.image.rows) {
         offsetY = box.height * 2;
     } else if (box.y - box.height >= 0) {
         offsetY = -box.height;
     }
 
-    cv::putText(debugImage, confidenceString,
+    cv::putText(workUnit.debugImage, confidenceString,
         cv::Point(box.x + box.width, box.y + offsetY * 0.75),
         cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 255));
 
-    auto & text = ocr.getText();
+    auto & text = ocr->getText();
 
     // cv::putText(debugImage, text,
     //     cv::Point(box.x, box.y + offsetY),
     //     cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0, 255, 255));
-    freetype->putText(debugImage, text,
+    workUnit.freetype->putText(workUnit.debugImage, text,
         cv::Point(box.x, box.y + offsetY),
         16, CV_RGB(255, 127, 0), -1, cv::LINE_8, true);
 }
 
-void App::drawOCRThresholdImage(const Region & region, const cv::Rect & box) {
-    auto & ocr = textRecognizers.at(region.name);
-    auto thresholdImage = ocr.getThresholdedImage();
+void App::drawOCRThresholdImage(const WorkUnit & workUnit, const cv::Rect & box) {
+    auto & region = workUnit.region;
+    auto ocr = workUnit.ocr;
+    auto thresholdImage = ocr->getThresholdedImage();
     int offsetY = 0;
 
-    if (box.y + box.height < image.rows) {
+    if (box.y + box.height < workUnit.image.rows) {
         offsetY = box.height;
     } else if (box.y - box.height >= 0) {
         offsetY = -box.height;
@@ -273,15 +308,16 @@ void App::drawOCRThresholdImage(const Region & region, const cv::Rect & box) {
 
     auto drawingRect = cv::Rect(box.x, box.y + offsetY, box.width, thresholdImage.rows);
 
-    thresholdImage.copyTo(debugImage(drawingRect));
+    thresholdImage.copyTo(workUnit.debugImage(drawingRect));
 }
 
-void App::drawOCRLineBoundaries(const Region & region, const cv::Rect & box) {
-    auto & ocr = textRecognizers.at(region.name);
-    auto lineBoundaries = ocr.getLineBoundaries();
+void App::drawOCRLineBoundaries(const WorkUnit & workUnit, const cv::Rect & box) {
+    auto & region = workUnit.region;
+    auto ocr = workUnit.ocr;
+    auto lineBoundaries = ocr->getLineBoundaries();
     int offsetY = 0;
 
-    if (box.y + box.height < image.rows) {
+    if (box.y + box.height < workUnit.image.rows) {
         offsetY = box.height;
     } else if (box.y - box.height >= 0) {
         offsetY = -box.height;
@@ -294,8 +330,18 @@ void App::drawOCRLineBoundaries(const Region & region, const cv::Rect & box) {
             lineBoundary.width,
             lineBoundary.height
         );
-        cv::rectangle(debugImage, drawingRect, CV_RGB(0, 255, 255));
+        cv::rectangle(workUnit.debugImage, drawingRect, CV_RGB(0, 255, 255));
     }
 }
+
+void App::drawFrameInfo(const WorkUnit & workUnit) {
+    char text[50];
+    snprintf(text, 50, "Frame %d, id %d", workUnit.frameID, workUnit.id);
+
+    cv::putText(workUnit.debugImage, text,
+        cv::Point(0, 40),
+        cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(255, 127, 0));
+}
+
 
 }
