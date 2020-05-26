@@ -17,7 +17,6 @@ Note: **work in progress**
 * [Leptonica](http://www.leptonica.org/)
 * [ffmpeg](https://ffmpeg.org/download.html)
 * [OpenCV](https://docs.opencv.org/master/df/d65/tutorial_table_of_content_introduction.html) 4
-* [POCO](https://pocoproject.org/)
 * [EAST](https://github.com/argman/EAST) trained model
   * Download the Tensorflow trained model from [this link](https://www.dropbox.com/s/r2ingd0l3zt8hxs/frozen_east_text_detection.tar.gz?dl=1)
 

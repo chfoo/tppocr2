@@ -10,23 +10,19 @@ add_executable(tppocr_exe ${SRC_FILES})
 find_path(TESSERACT_INCLUDE_PATH "tesseract/baseapi.h")
 find_path(LEPTONICA_INCLUDE_PATH "leptonica/allheaders.h")
 find_path(TOMLPLUSPLUS_INCLUDE_PATH "toml++/toml.h")
-find_path(POCO_INCLUDE_PATH "Poco/Poco.h")
 
 find_library(TESSERACT_LIBRARY_PATH "tesseract")
 find_library(LEPTONICA_LIBRARY_PATH "leptonica")
-find_library(POCO_LIBRARY_PATH  "PocoFoundation")
 
 target_include_directories(tppocr_exe PRIVATE
     "${TESSERACT_INCLUDE_PATH}"
     "${LEPTONICA_INCLUDE_PATH}"
     "${TOMLPLUSPLUS_INCLUDE_PATH}"
-    "${POCO_INCLUDE_PATH}"
 )
 
 target_link_libraries(tppocr_exe PRIVATE
     "${TESSERACT_LIBRARY_PATH}"
     "${LEPTONICA_LIBRARY_PATH}"
-    "${POCO_LIBRARY_PATH}"
 )
 
 
@@ -74,6 +70,7 @@ if(MSVC)
     target_compile_options(tppocr_exe PRIVATE /W4)
 else()
     target_compile_options(tppocr_exe PRIVATE -Wall -Wextra -pedantic)
+    target_link_options(tppocr_exe PRIVATE -pthread)
 endif()
 
 set_target_properties(tppocr_exe PROPERTIES OUTPUT_NAME "tppocr")
